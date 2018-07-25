@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+      <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css" integrity="sha384-WskhaSGFgHYWDcbwN70/dfYBj47jz9qbsMId/iRN3ewGhXQFZCSftd1LZCfmhktB" crossorigin="anonymous">
+      <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+      <script src="//maxcdn.bootstrapcdn.com/bootstrap/4.1.1/js/bootstrap.min.js"></script>
+      <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+      <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>
+
+        <script>
+
+
+            document.addEventListener('DOMContentLoaded',  () => {
+
+
+              // If localStorage got username already, then change the logo, hide username input and save username as a const variable
+              // If localStorage got channel_name and username both, it opens previous channel
+              if (localStorage.getItem('username')) {
+                var username = localStorage.getItem('username');
+                document.querySelector('#logo').innerHTML = username + ' is Online.';
+                document.querySelector("#username").style.display = "none";
+
+                  if (localStorage.getItem('channel_name')) {
+                    var channel_name = localStorage.getItem('channel_name');
+                    load_page(channel_name);
+                  }
+              }
+
+              // Else give some string to the logo and hide logout button
+              else {
+                document.querySelector('#logo').innerHTML = 'Project 2';
+                document.querySelector("#logout").style.display = "none";
+              }
+
+
+
+              // Enable button only if there is text in the input field
+              document.querySelector('#submit').disabled = true;
+                document.querySelector('#name').onkeyup = () => {
+                    if (document.querySelector('#name').value.length > 0)
+                        document.querySelector('#submit').disabled = false;
+                    else
+                        document.querySelector('#submit').disabled = true;
+              };
+
+
+              // When a user submit username change header
+              document.querySelector('#username').onsubmit = () => {
+                var username = document.querySelector('#name').value;
+                localStorage.setItem('username', username);
+                document.querySelector('#logo').innerHTML = localStorage.getItem('username') + ' is Online.';
+                document.querySelector("#username").style.display = "none";
+                document.querySelector("#logout").style.display = "block";
+                document.querySelector('#name').value = '';
+                document.querySelector('#submit').disabled = true;
+                return false;
+              };
+
+
+              // When a user submit logout button, then remove username from localStorage and get back username input box
+              document.querySelector('#logout').onsubmit = () => {
+                localStorage.removeItem('username');
+                document.querySelector('#logo').innerHTML = 'Project 2';
+                document.querySelector("#username").style.display = "block";
+                document.querySelector("#logout").style.display = "none";
+                return false;
+                };
+
+
+              // Retrieve channel_list and apped to the list
+              const chlist = {{ channel_list|tojson }};
+                chlist.forEach(chlist => {
+                  var channel_name = chlist;
+                  const a = document.createElement('a');
+                  a.innerHTML = ('<a href="" class="dropdown-item" data-page="'+channel_name+'">' + channel_name + '</a>');
+                  document.querySelector("#channels").append(a);
+              });
+
+
+              // Set links up to load new pages
+              document.querySelectorAll('.dropdown-item').forEach(link => {
+                  link.onclick = () => {
+                    if (!localStorage.getItem('username')) {
+                      alert('Please input username first.');
+                    }
+                    else {
+                      var page = link.dataset.page;
+                      load_page(page);
+                      localStorage.setItem('channel_name', page);
+                    }
+                    return false;
+                  };
+              });
+
+
+              // When a user try to generate a channel, check whitespace in the name and emit 'generate channel'
+              var socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
+                socket.on('connect', () => {
+                  document.querySelector('#generate_channel').onsubmit = () => {
+                      var channel_name = document.querySelector('#channel_name').value;
+                      if (hasWhiteSpace(`${channel_name}`)) {
+                        alert('Do not use space in a channel name.');
+                      }
+                      else {
+                        socket.emit('generate channel', channel_name);
+                      }
+                      return false;
+                  };
+                });
+
+
+                // list channels up
+              socket.on('list channel', channel_name => {
+                  const a = document.createElement('a');
+                      a.innerHTML = ('<option href="" class="dropdown-item" data-page="'+channel_name+'">' + channel_name + '</option>');
+                      document.querySelector('#channels').append(a);
+
+                      // Clear input field and disable button again
+                      document.querySelector('#channel_name').value = '';
+                      document.querySelector('#generate').disabled = true;
+              });
+
+
+
+              // By default, submit button is disabled
+              document.querySelector('#generate').disabled = true;
+
+              // Enable button only if there is text in the input field
+              document.querySelector('#channel_name').onkeyup = () => {
+                  if (document.querySelector('#channel_name').value.length > 0)
+                      document.querySelector('#generate').disabled = false;
+                  else
+                      document.querySelector('#generate').disabled = true;
+              };
+
+            // End of the first eventListener
+            });
+
+
+            // When a user type and submit message, check username in localStorage and emit data
+            document.addEventListener('DOMContentLoaded', () => {
+                var socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
+                socket.on('connect', () => {
+                    document.querySelector('#msgs').onsubmit = () => {
+                            const msg = document.querySelector('#msg').value;
+
+                            if (localStorage.getItem('username')) {
+                              var username = localStorage.getItem('username');
+                              var channel_name = localStorage.getItem('channel_name');
+                              var d = new Date();
+                              var hrs = d.getHours();
+                              var min = d.getMinutes();
+                              if (min < 10) {
+                                min = '0'+min;
+                              }
+                              let t=hrs+":"+min
+                              socket.emit('send msgs', {'msg': msg, 'username': username, 'channel_name': channel_name, 'timestamp': t});
+                              document.querySelector('#msg').value = '';
+                              return false;
+                            }
+                            else {
+                              alert('Enter username first.');
+                              return false;
+                            }
+                        };
+                    });
+
+
+              // When a new msg is announced, add to the screen
+              socket.on('announce msg', data => {
+                  var username = data['username'];
+                  var msg = data['msg'];
+                  var channel_name = data['channel_name'];
+                  var timestamp = data['timestamp'];
+                  const li = document.createElement('li');
+                  li.innerHTML = "<p class='msg'>" + username + ": </p><p> [" + timestamp + "] " + msg + "</p>";
+                  document.querySelector(`#chatting_${channel_name}`).append(li);
+              });
+
+          });
+
+
+            // Renders contents of new page in main view
+            function load_page(name) {
+                var request = new XMLHttpRequest();
+                request.open('GET', `/${name}`);
+                request.onload = () => {
+                  var response = request.responseText;
+                  document.querySelector('#body').innerHTML = response;
+
+                  // retrive previous chatlog from server and listing them
+                  var data = {{ message_list|tojson }};
+                  var i;
+                  var text="";
+                  for (i = 0; i < data.length; i++) {
+                  	if (data[i].channel_name == name) {
+                      	text += "<p class='msg'>" + data[i].username + ": </p><p>[" + data[i].timestamp + "] " + data[i].msg + "</p>";
+                    }
+                  }
+                  document.querySelector(`#result_${name}`).innerHTML = text;
+                };
+                request.send();
+            }
+
+            // Whitespace check function
+            function hasWhiteSpace(s) {
+                return /\s/g.test(s);
+            }
+
+        </script>
+
+      <title>Project2</title>
+
+        <header>
+
+          <div class="header">
+            <a href="#" id="logo"></a>
+            <form id="username">
+              <div class="header-right">
+                <div class="input-group mb-2">
+                <input type="text"  class="form-control" id="name" placeholder="Username" aria-describedby="basic-addon2">
+                  <div class="input-group-append mb-0">
+                    <button class="btn btn-outline-secondary" id="submit" type="submit">Submit</button>
+                  </div>
+                </div>
+              </div>
+            </form>
+
+            <form id="logout">
+              <button class="btn btn-secondary" href="#" role="button"> Log out </button>
+            </form>
+
+          </div>
+
+	      </header>
+
+    </head>
+
+    <body>
+
+        <nav>
+
+          <h3>Welcome!</32>
+          <h5 class="italic">1. Input your username.</h5>
+          <h5 class="italic">2. Select or Create a channel.</h5>
+          <h5 class="italic">3. Enjoy your communication!</h5>
+          <hr>
+          <ul id="menu">
+              <form id="generate_channel">
+                <div class="input-group mb-1">
+                  <input id="channel_name" type="text" class="form-control" placeholder="Create a channel" aria-describedby="basic-addon2">
+                    <div class="input-group-append mb-0">
+                      <button id="generate" class="btn btn-outline-secondary" type="submit" required="" >+</button>
+                    </div>
+                </div>
+              </form>
+          </ul>
+
+          <div class="dropdown">
+            <button class="btn btn-outline-secondary btn-lg dropdown-toggle" type="button" id="chlist_drdo" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+              Channel List
+            </button>
+            <div id="channels" class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+            </div>
+          </div>
+
+        </nav>
+
+      <section>
+
+        <article>
+
+          <h1 class="message">{{ message }}</h1>
+          <hr>
+          <div id="body" class="wrap">
+          </div>
+          <ul id="ulo">
+          </ul>
+
+        </article>
+
+      </section>
+
+        <footer>
+
+            <form id="msgs">
+              <div class="input-group mb-3">
+                <input type="text" id="msg" class="form-control" placeholder="Type..." aria-label="Recipient's username" aria-describedby="button-addon2" required="">
+                <div class="input-group-append">
+                </div>
+              </div>
+            </form>
+
+        </footer>
+
+        <!-- Optional JavaScript -->
+        <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+        <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/js/bootstrap.min.js" integrity="sha384-smHYKdLADwkXOn1EmN1qk/HfnUcbVRZyYmZ4qpPea6sjB/pTJ0euyQp0Mk8ck+5T" crossorigin="anonymous"></script>
+
+    </body>
+
+</html>
